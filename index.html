@@ -67,8 +67,13 @@
     <!-- Map Container -->
     <div id="map" class="flex-grow"></div>
 
-    <!-- Big SOS Button -->
-    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 ui-layer pointer-events-auto">
+    <!-- Floating Action Buttons (Add Place & SOS) -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 ui-layer pointer-events-auto flex items-center space-x-3">
+        <!-- Add Place Button -->
+        <button id="addPlaceBtn" class="bg-white text-slate-700 font-bold w-14 h-14 rounded-full shadow-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-transform text-lg" title="Add Restroom">
+            <i class="fa-solid fa-plus text-blue-600"></i>
+        </button>
+        <!-- Big SOS Button -->
         <button id="sosBtn" class="btn-sos bg-gradient-to-b from-red-500 to-red-600 text-white font-black text-xl rounded-full px-8 py-4 shadow-xl border-4 border-white flex items-center space-x-2 hover:scale-105 active:scale-95 transition-transform">
             <i class="fa-solid fa-bolt"></i>
             <span>SOS</span>
@@ -118,6 +123,71 @@
         </div>
     </div>
 
+    <!-- Add Place Modal -->
+    <div id="addPlaceModal" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm ui-layer flex items-center justify-center p-4 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-restroom"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black">Add New Restroom</h2>
+                        <p class="text-xs text-blue-100">Pin a spot at your current location</p>
+                    </div>
+                </div>
+                <button id="closeAddModal" class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <form id="addPlaceForm" class="p-6 overflow-y-auto space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Location Name</label>
+                    <input type="text" id="newPlaceName" required placeholder="e.g. City Park Public WC" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-blue-500 font-medium text-sm">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Category</label>
+                        <select id="newPlaceCategory" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-800 focus:outline-none focus:border-blue-500 font-medium text-sm">
+                            <option value="Public Restroom">Public Restroom</option>
+                            <option value="Gas Station">Gas Station</option>
+                            <option value="Restaurant / Cafe">Restaurant / Cafe</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Access Fee</label>
+                        <select id="newPlaceFee" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-800 focus:outline-none focus:border-blue-500 font-medium text-sm">
+                            <option value="Free">Free</option>
+                            <option value="Paid">Paid (€0.50)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2 pt-2">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Amenities</label>
+                    <div class="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <input type="checkbox" id="newPlaceAccessible" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+                        <label for="newPlaceAccessible" class="text-sm font-bold text-slate-700 flex items-center">
+                            <i class="fa-solid fa-wheelchair text-blue-500 mr-2"></i> Wheelchair Accessible
+                        </label>
+                    </div>
+                    <div class="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <input type="checkbox" id="newPlaceBaby" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+                        <label for="newPlaceBaby" class="text-sm font-bold text-slate-700 flex items-center">
+                            <i class="fa-solid fa-baby text-purple-500 mr-2"></i> Baby Changing Station
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all shadow-lg shadow-blue-500/30 mt-4">
+                    Add to Map
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- Leaderboard Modal -->
     <div id="leaderboardModal" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm ui-layer flex items-center justify-center p-4 hidden opacity-0 transition-opacity duration-300">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
@@ -158,17 +228,6 @@
                     </div>
                     <span class="bg-slate-200 text-slate-700 font-extrabold px-3 py-1 rounded-full text-xs">980 pts</span>
                 </div>
-                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div class="flex items-center space-x-3">
-                        <span class="font-black text-amber-700 w-6 text-center">3</span>
-                        <div class="w-10 h-10 bg-emerald-500 text-white font-bold rounded-full flex items-center justify-center">ZT</div>
-                        <div>
-                            <p class="font-bold text-slate-800">Zdenko T.</p>
-                            <p class="text-xs text-slate-500">19 mappings & reviews</p>
-                        </div>
-                    </div>
-                    <span class="bg-slate-200 text-slate-700 font-extrabold px-3 py-1 rounded-full text-xs">650 pts</span>
-                </div>
             </div>
         </div>
     </div>
@@ -182,7 +241,7 @@
     </div>
 
     <script>
-        const DEFAULT_LAT = 48.1486; // Bratislava fallback
+        const DEFAULT_LAT = 48.1486;
         const DEFAULT_LNG = 17.1077;
         
         let map;
@@ -254,8 +313,7 @@
         }
 
         async function fetchRestroomsFromOSM() {
-            const radius = 4000; // 4km search radius
-            // Using reliable LZ4 Overpass mirror endpoint
+            const radius = 4000;
             const query = `
                 [out:json][timeout:20];
                 (
@@ -459,6 +517,7 @@
                 if (activeRestroom) drawRoute(activeRestroom);
             });
 
+            // Leaderboard modal listeners
             const lbModal = document.getElementById('leaderboardModal');
             document.getElementById('leaderboardBtn').addEventListener('click', () => {
                 lbModal.classList.remove('hidden');
@@ -467,6 +526,50 @@
             document.getElementById('closeLeaderboard').addEventListener('click', () => {
                 lbModal.classList.add('opacity-0');
                 setTimeout(() => lbModal.classList.add('hidden'), 300);
+            });
+
+            // Add Place modal listeners
+            const addModal = document.getElementById('addPlaceModal');
+            document.getElementById('addPlaceBtn').addEventListener('click', () => {
+                addModal.classList.remove('hidden');
+                setTimeout(() => addModal.classList.remove('opacity-0'), 10);
+            });
+            document.getElementById('closeAddModal').addEventListener('click', () => {
+                addModal.classList.add('opacity-0');
+                setTimeout(() => addModal.classList.add('hidden'), 300);
+            });
+
+            // Add Place Form Submission
+            document.getElementById('addPlaceForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('newPlaceName').value;
+                const category = document.getElementById('newPlaceCategory').value;
+                const fee = document.getElementById('newPlaceFee').value;
+                const accessible = document.getElementById('newPlaceAccessible').checked;
+                const babyCare = document.getElementById('newPlaceBaby').checked;
+
+                // Add slight offset around user so multiple additions don't stack directly on top of each other
+                const newRestroom = {
+                    id: 'custom_' + Date.now(),
+                    lat: userLocation.lat + (Math.random() - 0.5) * 0.001,
+                    lng: userLocation.lng + (Math.random() - 0.5) * 0.001,
+                    name: name,
+                    category: category,
+                    fee: fee,
+                    accessible: accessible,
+                    babyCare: babyCare,
+                    rating: "5.0"
+                };
+
+                restroomsData.unshift(newRestroom);
+                renderMapMarkers();
+                openDetailSheet(newRestroom);
+
+                // Close modal and reset
+                addModal.classList.add('opacity-0');
+                setTimeout(() => addModal.classList.add('hidden'), 300);
+                document.getElementById('addPlaceForm').reset();
+                showToast("New restroom added successfully!");
             });
         }
 
