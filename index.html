@@ -169,17 +169,6 @@
                     </div>
                     <span class="bg-slate-200 text-slate-700 font-extrabold px-3 py-1 rounded-full text-xs">650 pts</span>
                 </div>
-                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div class="flex items-center space-x-3">
-                        <span class="font-black text-slate-400 w-6 text-center">4</span>
-                        <div class="w-10 h-10 bg-purple-500 text-white font-bold rounded-full flex items-center justify-center">PK</div>
-                        <div>
-                            <p class="font-bold text-slate-800">Peter K.</p>
-                            <p class="text-xs text-slate-500">12 mappings & reviews</p>
-                        </div>
-                    </div>
-                    <span class="bg-slate-200 text-slate-700 font-extrabold px-3 py-1 rounded-full text-xs">410 pts</span>
-                </div>
             </div>
         </div>
     </div>
@@ -193,7 +182,7 @@
     </div>
 
     <script>
-        const DEFAULT_LAT = 48.1486; // Bratislava
+        const DEFAULT_LAT = 48.1486; // Bratislava fallback
         const DEFAULT_LNG = 17.1077;
         
         let map;
@@ -265,9 +254,10 @@
         }
 
         async function fetchRestroomsFromOSM() {
-            const radius = 3500;
+            const radius = 4000; // 4km search radius
+            // Using reliable LZ4 Overpass mirror endpoint
             const query = `
-                [out:json][timeout:15];
+                [out:json][timeout:20];
                 (
                   node["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
                   way["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
@@ -276,13 +266,13 @@
                   node["amenity"="fast_food"](around:${radius},${userLocation.lat},${userLocation.lng});
                   node["amenity"="cafe"](around:${radius},${userLocation.lat},${userLocation.lng});
                 );
-                out center 50;
+                out center 80;
             `;
-            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            const url = `https://lz4.overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
 
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -293,13 +283,13 @@
                 
                 if (data.elements && data.elements.length > 0) {
                     restroomsData = data.elements.map(el => processOSMNode(el));
-                    showToast(`Found ${restroomsData.length} locations nearby.`);
+                    showToast(`Found ${restroomsData.length} real locations nearby!`);
                 } else {
-                    throw new Error("No locations found in API");
+                    throw new Error("No elements found");
                 }
             } catch (error) {
                 console.error("OSM Fetch failed:", error);
-                showToast("Loading neighborhood spots.");
+                showToast("Using neighborhood fallback data.");
                 restroomsData = generateMockData(userLocation.lat, userLocation.lng);
             } finally {
                 setLoading(false);
@@ -320,8 +310,8 @@
             } else if (amenity === "restaurant" || amenity === "fast_food" || amenity === "cafe") {
                 category = "Restaurant / Cafe";
                 name = name ? `${name}` : "Venue Restroom";
-            } else if (tags.name) {
-                name = tags.name;
+            } else if (!name) {
+                name = "Public Restroom";
             }
 
             return {
@@ -339,16 +329,16 @@
 
         function generateMockData(baseLat, baseLng) {
             const mock = [];
-            const names = ["Station Restroom", "City Park Public WC", "Central Cafe Restroom", "Shopping Mall Restrooms", "Gas & Go Facility"];
+            const names = ["OMV Gas Station Restroom", "City Center Public WC", "Bistro & Cafe Restroom", "Supermarket Restrooms", "Shell Station Facility"];
             for (let i = 0; i < names.length; i++) {
-                const latOffset = (Math.random() - 0.5) * 0.02;
-                const lngOffset = (Math.random() - 0.5) * 0.02;
+                const latOffset = (Math.random() - 0.5) * 0.025;
+                const lngOffset = (Math.random() - 0.5) * 0.025;
                 mock.push({
                     id: `mock_${i}`,
                     lat: baseLat + latOffset,
                     lng: baseLng + lngOffset,
                     name: names[i],
-                    category: i === 0 ? "Gas Station" : (i === 2 ? "Restaurant / Cafe" : "Public Restroom"),
+                    category: i === 0 || i === 4 ? "Gas Station" : (i === 2 ? "Restaurant / Cafe" : "Public Restroom"),
                     fee: i % 3 === 0 ? "Paid" : "Free",
                     accessible: true,
                     babyCare: i % 2 === 0,
@@ -379,28 +369,21 @@
                 });
 
                 const marker = L.marker([restroom.lat, restroom.lng], { icon: customIcon });
-                
-                marker.on('click', () => {
-                    openDetailSheet(restroom);
-                });
-                
+                marker.on('click', () => openDetailSheet(restroom));
                 markersGroup.addLayer(marker);
             });
         }
 
         function openDetailSheet(restroom) {
             activeRestroom = restroom;
-            
             document.getElementById('detailTitle').textContent = restroom.name;
             document.getElementById('detailCategory').textContent = restroom.category;
             
             const feeEl = document.getElementById('detailFee');
             feeEl.textContent = restroom.fee;
-            if(restroom.fee === "Free") {
-                feeEl.className = "bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center";
-            } else {
-                feeEl.className = "bg-amber-100 text-amber-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center";
-            }
+            feeEl.className = restroom.fee === "Free" 
+                ? "bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center" 
+                : "bg-amber-100 text-amber-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center";
 
             setFeatureOpacity('featWheelchair', restroom.accessible);
             setFeatureOpacity('featBaby', restroom.babyCare);
@@ -419,11 +402,8 @@
 
         function setFeatureOpacity(id, active) {
             const el = document.getElementById(id);
-            if (active) {
-                el.classList.remove('opacity-40', 'grayscale');
-            } else {
-                el.classList.add('opacity-40', 'grayscale');
-            }
+            if (active) el.classList.remove('opacity-40', 'grayscale');
+            else el.classList.add('opacity-40', 'grayscale');
         }
 
         function triggerSOS() {
@@ -449,9 +429,7 @@
         }
 
         function drawRoute(destination) {
-            if (routePolyline) {
-                map.removeLayer(routePolyline);
-            }
+            if (routePolyline) map.removeLayer(routePolyline);
 
             const latlngs = [
                 [userLocation.lat, userLocation.lng],
@@ -481,7 +459,6 @@
                 if (activeRestroom) drawRoute(activeRestroom);
             });
 
-            // Leaderboard modal listeners
             const lbModal = document.getElementById('leaderboardModal');
             document.getElementById('leaderboardBtn').addEventListener('click', () => {
                 lbModal.classList.remove('hidden');
