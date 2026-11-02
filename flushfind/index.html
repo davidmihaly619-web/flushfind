@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FlushFind</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Map Container needs to take full height */
+        #map { height: 100%; width: 100%; z-index: 0; }
+        
+        /* Custom UI layering */
+        .ui-layer { z-index: 400; }
+        
+        /* Bottom Sheet Transition */
+        .bottom-sheet {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(100%);
+        }
+        .bottom-sheet.open {
+            transform: translateY(0);
+        }
+
+        /* Leaflet reset for Tailwind */
+        .leaflet-container { font-family: inherit; }
+        
+        /* Pulse Animation for SOS */
+        @keyframes sosPulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .btn-sos {
+            animation: sosPulse 2s infinite;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden bg-slate-100 font-sans text-slate-900 flex flex-col relative">
+
+    <!-- Top Bar -->
+    <div class="absolute top-0 w-full ui-layer p-4 pointer-events-none">
+        <div class="flex justify-between items-start pointer-events-auto">
+            <!-- App Logo / Title -->
+            <div class="bg-white/90 backdrop-blur rounded-2xl shadow-lg px-4 py-2 flex items-center space-x-2">
+                <i class="fa-solid fa-droplet text-blue-500"></i>
+                <span class="font-black text-lg tracking-tight">FlushFind</span>
+            </div>
+            
+            <!-- Recenter & Loading Actions -->
+            <div class="flex flex-col space-y-2">
+                <button id="recenterBtn" class="bg-white/90 backdrop-blur rounded-full w-10 h-10 shadow-lg flex items-center justify-center text-slate-700 hover:text-blue-600 transition">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                </button>
+                <div id="loadingIndicator" class="bg-white/90 backdrop-blur rounded-full w-10 h-10 shadow-lg flex items-center justify-center text-blue-500 hidden">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Container -->
+    <div id="map" class="flex-grow"></div>
+
+    <!-- Big SOS Button -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 ui-layer pointer-events-auto">
+        <button id="sosBtn" class="btn-sos bg-gradient-to-b from-red-500 to-red-600 text-white font-black text-xl rounded-full px-8 py-4 shadow-xl border-4 border-white flex items-center space-x-2 hover:scale-105 active:scale-95 transition-transform">
+            <i class="fa-solid fa-bolt"></i>
+            <span>SOS</span>
+        </button>
+    </div>
+
+    <!-- Bottom Sheet for Restroom Details -->
+    <div id="detailSheet" class="absolute bottom-0 w-full bg-white rounded-t-3xl shadow-2xl ui-layer bottom-sheet pb-safe flex flex-col max-h-[60vh]">
+        <div class="w-full flex justify-center p-3 cursor-pointer pointer-events-auto" id="closeSheetDrag">
+            <div class="w-12 h-1.5 bg-slate-300 rounded-full"></div>
+        </div>
+        
+        <div class="px-6 pb-6 overflow-y-auto pointer-events-auto">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <span id="detailCategory" class="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md mb-1 inline-block">Public Toilet</span>
+                    <h2 id="detailTitle" class="text-xl font-black leading-tight text-slate-800">Central Restroom</h2>
+                    <p id="detailDistance" class="text-sm font-semibold text-slate-500 mt-1">120m away</p>
+                </div>
+                <div class="bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center">
+                    <i class="fa-solid fa-coins mr-1.5"></i>
+                    <span id="detailFee">Free</span>
+                </div>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="grid grid-cols-3 gap-2 mb-6">
+                <div id="featWheelchair" class="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <i class="fa-solid fa-wheelchair text-blue-500 mb-1"></i>
+                    <p class="text-[10px] font-bold text-slate-600">Accessible</p>
+                </div>
+                <div id="featBaby" class="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <i class="fa-solid fa-baby text-purple-500 mb-1"></i>
+                    <p class="text-[10px] font-bold text-slate-600">Baby Care</p>
+                </div>
+                <div id="featRating" class="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <i class="fa-solid fa-star text-amber-400 mb-1"></i>
+                    <p class="text-[10px] font-bold text-slate-600">4.5/5</p>
+                </div>
+            </div>
+
+            <!-- Action -->
+            <button id="navigateBtn" class="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl flex justify-center items-center space-x-2 active:bg-slate-800 transition-colors">
+                <i class="fa-solid fa-person-walking-arrow-right"></i>
+                <span>Navigate Here</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 ui-layer pointer-events-none transition-opacity duration-300 opacity-0 hidden">
+        <div class="bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg flex items-center space-x-2">
+            <i class="fa-solid fa-info-circle text-blue-400"></i>
+            <span id="toastMessage">Message</span>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION & STATE ---
+        const DEFAULT_LAT = 48.1486; // Bratislava
+        const DEFAULT_LNG = 17.1077;
+        
+        let map;
+        let userMarker;
+        let restroomsData = [];
+        let markersGroup;
+        let routePolyline;
+        let userLocation = { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
+        let activeRestroom = null;
+
+        // --- 2. INITIALIZATION (IMMEDIATE) ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMapImmediately();
+            setupEventListeners();
+            
+            // Do not block DOM - fetch location and data asynchronously
+            setTimeout(fetchUserLocationAndData, 100);
+        });
+
+        function initMapImmediately() {
+            // Initialize Leaflet Map
+            map = L.map('map', {
+                zoomControl: false, // Custom controls handled via UI
+                attributionControl: false
+            }).setView([DEFAULT_LAT, DEFAULT_LNG], 15);
+
+            // Add Standard OpenStreetMap Tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+
+            // Create Layer Group for Restroom Markers
+            markersGroup = L.featureGroup().addTo(map);
+
+            // Create User Marker (Blue Dot)
+            const userIcon = L.divIcon({
+                className: '',
+                html: `<div class="relative flex items-center justify-center w-6 h-6">
+                        <div class="absolute w-6 h-6 bg-blue-500/40 rounded-full animate-ping"></div>
+                        <div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-md z-10"></div>
+                       </div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            userMarker = L.marker([DEFAULT_LAT, DEFAULT_LNG], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+        }
+
+        // --- 3. ROBUST LOCATION & DATA FETCHING ---
+        function fetchUserLocationAndData() {
+            setLoading(true);
+            
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        updateUserLocationOnMap();
+                        fetchRestroomsFromOSM();
+                    },
+                    (error) => {
+                        // Error / Denied
+                        showToast("Using default location (Bratislava).");
+                        fetchRestroomsFromOSM(); // Fetch for default location
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else {
+                showToast("Geolocation not supported.");
+                fetchRestroomsFromOSM();
+            }
+        }
+
+        function updateUserLocationOnMap() {
+            userMarker.setLatLng([userLocation.lat, userLocation.lng]);
+            map.setView([userLocation.lat, userLocation.lng], 15);
+        }
+
+        async function fetchRestroomsFromOSM() {
+            const radius = 2000; // 2km
+            // Overpass QL Query
+            const query = `
+                [out:json][timeout:10];
+                (
+                  node["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
+                  node["amenity"="fuel"]["toilets"="yes"](around:${radius},${userLocation.lat},${userLocation.lng});
+                );
+                out center;
+            `;
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) throw new Error("API Response not OK");
+                
+                const data = await response.json();
+                
+                if (data.elements && data.elements.length > 0) {
+                    restroomsData = data.elements.map(el => processOSMNode(el));
+                    showToast(`Found ${restroomsData.length} restrooms nearby.`);
+                } else {
+                    throw new Error("No toilets found in API");
+                }
+            } catch (error) {
+                console.error("OSM Fetch failed:", error);
+                showToast("Network error. Loading fallback data.");
+                restroomsData = generateMockData(userLocation.lat, userLocation.lng);
+            } finally {
+                setLoading(false);
+                renderMapMarkers();
+            }
+        }
+
+        // --- 4. DATA PROCESSING & MOCKS ---
+        function processOSMNode(el) {
+            const tags = el.tags || {};
+            const isFuel = tags.amenity === "fuel";
+            return {
+                id: el.id,
+                lat: el.lat || (el.center && el.center.lat),
+                lng: el.lon || (el.center && el.center.lon),
+                name: tags.name || (isFuel ? "Gas Station Toilet" : "Public Restroom"),
+                category: isFuel ? "Gas Station" : "Public Toilet",
+                fee: (tags.fee === "no") ? "Free" : (tags.fee === "yes" ? "Paid" : "Unknown"),
+                accessible: tags.wheelchair === "yes",
+                babyCare: tags.baby_changing === "yes" || tags.changing_table === "yes",
+                rating: (Math.random() * 2 + 3).toFixed(1) // Simulate 3.0-5.0
+            };
+        }
+
+        function generateMockData(baseLat, baseLng) {
+            // Generate 5 fallback toilets near the current location
+            const mock = [];
+            for (let i = 1; i <= 5; i++) {
+                // Random offset roughly within 1km
+                const latOffset = (Math.random() - 0.5) * 0.015;
+                const lngOffset = (Math.random() - 0.5) * 0.015;
+                mock.push({
+                    id: `mock_${i}`,
+                    lat: baseLat + latOffset,
+                    lng: baseLng + lngOffset,
+                    name: i === 1 ? "Central Bistro Restroom" : `Public Toilet #${i}`,
+                    category: i === 1 ? "Restaurant" : "Public Toilet",
+                    fee: i % 2 === 0 ? "Free" : "Paid (€0.50)",
+                    accessible: i % 3 !== 0,
+                    babyCare: i % 4 === 0,
+                    rating: (Math.random() * 2 + 3).toFixed(1)
+                });
+            }
+            return mock;
+        }
+
+        // --- 5. UI RENDERING & LOGIC ---
+        function renderMapMarkers() {
+            markersGroup.clearLayers();
+
+            restroomsData.forEach(restroom => {
+                const iconColor = restroom.fee === "Free" ? "#10b981" : "#3b82f6"; // Green if free, Blue otherwise
+                
+                const customIcon = L.divIcon({
+                    className: 'custom-pin',
+                    html: `
+                        <div class="relative flex flex-col items-center drop-shadow-md">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm" style="background-color: ${iconColor};">
+                                <i class="fa-solid fa-restroom"></i>
+                            </div>
+                            <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px]" style="border-top-color: ${iconColor};"></div>
+                        </div>
+                    `,
+                    iconSize: [32, 40],
+                    iconAnchor: [16, 40]
+                });
+
+                const marker = L.marker([restroom.lat, restroom.lng], { icon: customIcon });
+                
+                marker.on('click', () => {
+                    openDetailSheet(restroom);
+                });
+                
+                markersGroup.addLayer(marker);
+            });
+        }
+
+        function openDetailSheet(restroom) {
+            activeRestroom = restroom;
+            
+            document.getElementById('detailTitle').textContent = restroom.name;
+            document.getElementById('detailCategory').textContent = restroom.category;
+            
+            const feeEl = document.getElementById('detailFee');
+            feeEl.textContent = restroom.fee;
+            if(restroom.fee === "Free") {
+                feeEl.className = "bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center";
+            } else {
+                feeEl.className = "bg-amber-100 text-amber-700 font-bold px-3 py-1 rounded-lg text-sm flex items-center";
+            }
+
+            // Features
+            setFeatureOpcaity('featWheelchair', restroom.accessible);
+            setFeatureOpcaity('featBaby', restroom.babyCare);
+            document.querySelector('#featRating p').textContent = `${restroom.rating}/5`;
+
+            // Distance
+            const dist = getDistance(userLocation.lat, userLocation.lng, restroom.lat, restroom.lng);
+            document.getElementById('detailDistance').textContent = `${Math.round(dist)}m away`;
+
+            // Pan Map slightly up so sheet doesn't cover marker
+            map.panTo([restroom.lat - 0.003, restroom.lng]);
+
+            // Open Sheet
+            document.getElementById('detailSheet').classList.add('open');
+        }
+
+        function closeDetailSheet() {
+            document.getElementById('detailSheet').classList.remove('open');
+        }
+
+        function setFeatureOpcaity(id, active) {
+            const el = document.getElementById(id);
+            if (active) {
+                el.classList.remove('opacity-40', 'grayscale');
+            } else {
+                el.classList.add('opacity-40', 'grayscale');
+            }
+        }
+
+        // --- 6. SOS EMERGENCY LOGIC ---
+        function triggerSOS() {
+            if (!restroomsData || restroomsData.length === 0) {
+                showToast("No restrooms found nearby.");
+                return;
+            }
+
+            // Find closest
+            let closest = restroomsData[0];
+            let minDistance = getDistance(userLocation.lat, userLocation.lng, closest.lat, closest.lng);
+
+            for (let i = 1; i < restroomsData.length; i++) {
+                const dist = getDistance(userLocation.lat, userLocation.lng, restroomsData[i].lat, restroomsData[i].lng);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closest = restroomsData[i];
+                }
+            }
+
+            // Open Sheet
+            openDetailSheet(closest);
+
+            // Draw Route
+            drawRoute(closest);
+            
+            showToast("Emergency Route Calculated!");
+        }
+
+        function drawRoute(destination) {
+            if (routePolyline) {
+                map.removeLayer(routePolyline);
+            }
+
+            const latlngs = [
+                [userLocation.lat, userLocation.lng],
+                [destination.lat, destination.lng]
+            ];
+
+            routePolyline = L.polyline(latlngs, {
+                color: '#ef4444', // Red for emergency
+                weight: 5,
+                dashArray: '10, 10',
+                opacity: 0.8
+            }).addTo(map);
+
+            // Fit bounds to show both user and destination
+            map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+        }
+
+        // --- 7. UTILITIES & LISTENERS ---
+        function setupEventListeners() {
+            document.getElementById('recenterBtn').addEventListener('click', () => {
+                updateUserLocationOnMap();
+                if (routePolyline) map.removeLayer(routePolyline);
+                closeDetailSheet();
+            });
+
+            document.getElementById('sosBtn').addEventListener('click', triggerSOS);
+            document.getElementById('closeSheetDrag').addEventListener('click', closeDetailSheet);
+            document.getElementById('navigateBtn').addEventListener('click', () => {
+                if (activeRestroom) drawRoute(activeRestroom);
+            });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.classList.remove('hidden');
+            
+            // Force reflow
+            void toast.offsetWidth; 
+            
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.classList.add('hidden'), 300); // Wait for transition
+            }, 3000);
+        }
+
+        function setLoading(isLoading) {
+            const loader = document.getElementById('loadingIndicator');
+            if (isLoading) loader.classList.remove('hidden');
+            else loader.classList.add('hidden');
+        }
+
+        // Haversine distance formula (returns meters)
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // meters
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+    </script>
+</body>
+</html>
